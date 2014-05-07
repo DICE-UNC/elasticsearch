@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Search</title>
+		<link href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.css" rel="stylesheet">
+		<script src="https://code.jquery.com/jquery-2.1.0.js"></script>
+		<script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.15/angular.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.15/angular-resource.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.15/angular-sanitize.js"></script>
+		<!-- angular-xeditable -->
+		<link href="http://vitalets.github.io/angular-xeditable/dist/css/xeditable.css" rel="stylesheet">
+		<script src="http://vitalets.github.io/angular-xeditable/dist/js/xeditable.js"></script>
+<!-- stomp client --><script src="https://raw.github.com/jmesnil/stomp-websocket/master/lib/stomp.js"></script>
+		<script>
+			angular
+			.module('searchApp', ['ngResource', 'ngSanitize', 'xeditable'])
+			.run(function(editableOptions) {
+				editableOptions.theme = 'bs3';
+			})
+			.factory('messaging', function(){
+				var srv = { 
+					setAVU: function(label,type,attr,oldV,newV,unit) {  
+  						var url = "ws://localhost:61614/stomp";		
+  						var client = Stomp.client(url);
+  						var jsontype = type.substring(type.lastIndexOf('.')+1);
+						var connect_callback = function() {
+    						// called back after the client is connected and authenticated to the STOMP server
+							var body = {
+								messages: [
+					  				{
+									  	operation:"modify",
+									  	hasPart: [
+									  		{
+												type:jsontype,
+												label:label,
+									  			metadata: [
+									  				{
+									  					attribute:attr,
+									  					value:oldV,
+									  					unit:unit
+								  					}
+							  					],
+							  					storageLocation: [ "irods" ]
+									  		}, { 
+										  		type:jsontype,
+										  		metadata: [
+										  			{
+										  				attribute:attr,
+										  				value:newV,
+										  				unit:unit
+									  				}
+								  				]
+									  		}
+									  	]
+								  	}
+						  		]
+						  	};
+			  				client.send("/queue/metaQueue",{},JSON.stringify(body));
+				  			client.disconnect(function() {});
+  						};
+						client.connect("", "", connect_callback);
+	  				}
+	  			};
+	  			return srv;
+  			})
+  			.filter('datatype', function() {
+				return function(input) {
+					var type = input.substring(input.lastIndexOf('.')+1);
+					if(type === "DataObject") {
+						return "<span class='glyphicon glyphicon-file'></span>";
+					} else if(type === "Access") {
+						return "<span class='glyphicon glyphicon-wrench'></span>";
+					} else if(type === "Collection") {
+						return "<span class='glyphicon glyphicon-folder'></span>";
+					}
+				}
+			})
+			.controller('searchController', ['$scope', '$resource', 'messaging', function($scope, $resource, messaging) {
+				var res = $resource('http://localhost:9200/databook/entity/_search', {}, {
+					es: {
+						method: "POST"
+					}
+				});
+				$scope.update = function(source,prop,data) {
+					messaging.
+					setAVU(source.label,source.type,"data:"+prop,source[prop],data,"");
+				};
+				$scope.query = {text:"", result:{}};
+				$scope.queryString = {text:""};
+				$scope.change = function() {
+					$scope.queryString.text = $scope.query.text;
+					var query = {
+						_source: {
+							exclude: ["fulltext"]
+						},
+						query: {
+							bool: {
+								should: [{
+									match: {
+										label: $scope.queryString.text 
+									}
+								}, {
+									match: {
+										description: $scope.queryString.text 
+									}
+								}, {
+									match: {
+										type: $scope.queryString.text 
+									}
+								}, {
+									match: {
+										title: $scope.queryString.text 
+									}
+								}, {
+									match: {
+										fulltext: $scope.queryString.text 
+									}
+								}],
+								minimum_should_match: 1
+							}
+						},
+						highlight: {
+							fields : {
+								fulltext: {}
+							}
+						}
+					};
+					$scope.query.result = res.es(JSON.stringify(query));
+				};
+				$scope.refresh = function() {
+					$scope.change();
+				}
+			}]);
+			
+			
+		</script>
+		<style>
+			em {
+				background-color : yellow
+			}
+			
+			a.editable-click { 
+    			border-bottom: none;
+			}
+		</style>
+	</head>
+
+	<body ng-app="searchApp">
+		<div ng-controller="searchController">
+		<div class="input-group">
+			<input type="text" class="form-control" placeholder="type something" ng-model="query.text" ng-change="change()"/>
+			
+			<span class="input-group-btn">
+        <button class="btn btn-default" type="button" ng-click="refresh()">Refresh</button>
+      </span>
+			</div>
+			<div ng-show="query.result.hits">
+			{{ query.result.took }} ms. 
+			{{ query.result.hits.total }} record(s) found.
+					
+			<table class="table">
+			<tr>
+			<th>Type</th>
+			<th>Label</th>
+			<th>Title</th>
+			<th>Description</th>
+			<th>Created</th>
+			<!-- <th>Text</th> -->
+			<th>Highlights</th>
+			</tr>
+			
+			<tr ng-repeat="row in query.result.hits.hits">
+			<td ng-bind-html="row._source.type | datatype"></td>
+			<td>{{ row._source.label }}</td>
+			<td><a href="#" editable-text="row._source.title" onbeforesave="update(row._source, 'title', $data)"> 
+				{{ row._source.title || "empty" }} 
+			</a></td>
+			<td><a href="#" editable-textarea="row._source.description" e-rows="7" e-cols="40" onbeforesave="update(row._source, 'description', $data)"> 
+				{{ row._source.description || "empty" }}
+			</a></td>
+			<td>{{ row._source.created * 1000 | date }} <!--{{ row._source.created }}--></td>
+			<!-- <td><span ng-show="row._source.fulltext" class="glyphicon glyphicon-file"/></td> -->
+			<td ng-bind-html="row.highlight.fulltext[0]"></td>
+			</tr>
+			</table>
+			<div class="panel panel-default">
+    <div class="panel-heading">
+      <h4 class="panel-title">
+        <a data-toggle="collapse" href="#collapseTwo">
+          Raw
+        </a>
+      </h4>
+    </div>
+    <div id="collapseTwo" class="panel-collapse collapse">
+      <div class="panel-body">
+        {{ query.result.hits.hits }}
+      </div>
+    </div>
+  </div>
+			</div>
+	</body>
+</html>
