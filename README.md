@@ -1,3 +1,8 @@
-an elasticsearch connect for iRODS indexing framework
+an elasticsearch connector for iRODS indexing framework
 =============
-requirement elasticsearch 1.0
+requirements:
+
+* install elasticsearch 1.0
+* create index: curl -XPUT 'http://<host>:<port>/<index>' default is localhost 9200 databook
+
+
