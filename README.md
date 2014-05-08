@@ -9,7 +9,8 @@ requirements:
 
   default is localhost 9200 databook
 
-* create schems:
+* create schema:
+
     curl -XPUT 'http://localhost:9200/databook/entity/_mapping' -d '{"properties":{"uri":{"type":"string", "index":"not_analyzed"}, "type":{"type":"string", "index":"not_analyzed"}}}'
 
 
