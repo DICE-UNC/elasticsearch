@@ -8,6 +8,7 @@ an elasticsearch connector for iRODS indexing framework
         curl -XPUT 'http://<host>:<port>/<index>' 
 
   default is 
+  
         localhost 9200 databook
 
 * create schema:
