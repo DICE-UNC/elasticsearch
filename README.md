@@ -1,6 +1,6 @@
 an elasticsearch connector for iRODS indexing framework
 =============
-=== requirements ===
+### requirements
 
 * install elasticsearch 1.0
 * create index: 
@@ -15,10 +15,10 @@ an elasticsearch connector for iRODS indexing framework
    
 * the indexing bundle  
 
-=== installation ===
+### installation
 mvn install
 
-=== search interface ===
+### search interface
 open src/index.html in a browser window
 
 
