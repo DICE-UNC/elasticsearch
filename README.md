@@ -5,9 +5,10 @@ an elasticsearch connector for iRODS indexing framework
 * install elasticsearch 1.0
 * create index: 
 
-    curl -XPUT 'http://&lt;host&gt;:&lt;port&gt;/&lt;index&gt;' 
+        curl -XPUT 'http://<host>:<port>/<index>' 
 
-  default is localhost 9200 databook
+  default is 
+        localhost 9200 databook
 
 * create schema:
 
@@ -19,6 +20,6 @@ an elasticsearch connector for iRODS indexing framework
 mvn install
 
 ### search interface
-open src/index.html in a browser window
+open src/index.html in a browser window, if non-default host/port/index is used this file has to be modified to match them
 
 
