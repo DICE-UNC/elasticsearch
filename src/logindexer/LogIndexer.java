@@ -139,41 +139,43 @@ public class LogIndexer implements Indexer {
 
 	}
 	private void fulltext(DataObject o, final String id) {
-		System.out.println("full text");
-		Message msg= new Message();
-		msg.setOperation("retrieve");
-		ArrayList<DataEntity> list = new ArrayList<DataEntity>();
-		list.add(o);
-		msg.setHasPart(list);
-		scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
+		if(o.getLabel().endsWith(".txt")) {
+			System.out.println("full text");
+			Message msg= new Message();
+			msg.setOperation("retrieve");
+			ArrayList<DataEntity> list = new ArrayList<DataEntity>();
+			list.add(o);
+			msg.setHasPart(list);
+			scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
 
-			@Override
-			public void call(Reader data) {
-				try{
-				Reader is = data;
-				String s = IOUtils.toString(is);
-				is.close();
-				final HashMap<String, Object> updateObject = new HashMap<String, Object>();
-				updateObject.put("fulltext", s);
-				System.out.println("fulltext: " +s);
-				String script = "ctx._source.fulltext = fulltext ; ";
+				@Override
+				public void call(Reader data) {
+					try{
+					Reader is = data;
+					String s = IOUtils.toString(is);
+					is.close();
+					final HashMap<String, Object> updateObject = new HashMap<String, Object>();
+					updateObject.put("fulltext", s);
+					System.out.println("fulltext: " +s);
+					String script = "ctx._source.fulltext = fulltext ; ";
 				
-				UpdateResponse r = client
-						.prepareUpdate("databook", "entity", id)
-						.setScript(script)
-						.setScriptParams(updateObject).execute()
-						.actionGet();
-				}catch(Exception e) {
-					log.error("error", e);
+					UpdateResponse r = client
+							.prepareUpdate("databook", "entity", id)
+							.setScript(script)
+							.setScriptParams(updateObject).execute()
+							.actionGet();
+					}catch(Exception e) {
+						log.error("error", e);
+					}
 				}
-			}
-		}, new Continuation<Throwable>() {
+			}, new Continuation<Throwable>() {
 
-			@Override
-			public void call(Throwable data) {
-				log.error("error", data);
-			}
-		}));
+				@Override
+				public void call(Throwable data) {
+					log.error("error", data);
+				}
+			}));
+		}
 
 	}
 
@@ -198,7 +200,7 @@ public class LogIndexer implements Indexer {
 						final String id = resp.getId();
 						System.out.println("indexer response " + resp);
 						
-						if(o instanceof DataObject && o.getLabel().endsWith(".txt")) {
+						if(o instanceof DataObject) {
 							fulltext((DataObject) o, id);
 						}
 					}
