@@ -19,6 +19,8 @@ import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.transport.*;
+import org.elasticsearch.common.transport.*;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.QueryBuilder;
@@ -58,15 +60,23 @@ public class LogIndexer implements Indexer {
 
 	public void startup() {
 		is.regIndexer(this);
+		String os = System.getProperty("os.name");
 		// make sure that the nodeBuilder uses the classloader for the
 		// elasticsearch.jar file
 		// this is not always the same as the classloader for this class in an
 		// osgi bundle
 		Settings settings = ImmutableSettings.settingsBuilder()
-				.classLoader(Settings.class.getClassLoader()).build();
-		node = nodeBuilder().settings(settings).clusterName("databookIndexer")
+				.classLoader(Settings.class.getClassLoader()).put("cluster.name", "databookIndexer").build();
+				
+		if(os.contains("CentOS")) {
+		client = new TransportClient(settings).addTransportAddress(new InetSocketTransportAddress("localhost", 9300));
+		} else {
+		
+		node = nodeBuilder().settings(settings)
 				.client(true).node();
-		client = node.client();
+		client = node.client();			
+		}
+
 		
 		Message m = new Message();
 		m.setOperation("retrieve");
@@ -87,7 +97,11 @@ public class LogIndexer implements Indexer {
 
 	public void shutdown() {
 		is.unregIndexer(this);
-		node.close();
+		if(node != null) {
+			node.close();
+		} else {
+			client.close();
+		}
 	}
 
 	public static class Property<T> {
@@ -124,6 +138,44 @@ public class LogIndexer implements Indexer {
 		}
 
 	}
+	private void fulltext(DataObject o, final String id) {
+		System.out.println("full text");
+		Message msg= new Message();
+		msg.setOperation("retrieve");
+		ArrayList<DataEntity> list = new ArrayList<DataEntity>();
+		list.add(o);
+		msg.setHasPart(list);
+		scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
+
+			@Override
+			public void call(Reader data) {
+				try{
+				Reader is = data;
+				String s = IOUtils.toString(is);
+				is.close();
+				final HashMap<String, Object> updateObject = new HashMap<String, Object>();
+				updateObject.put("fulltext", s);
+				System.out.println("fulltext: " +s);
+				String script = "ctx._source.fulltext = fulltext ; ";
+				
+				UpdateResponse r = client
+						.prepareUpdate("databook", "entity", id)
+						.setScript(script)
+						.setScriptParams(updateObject).execute()
+						.actionGet();
+				}catch(Exception e) {
+					log.error("error", e);
+				}
+			}
+		}, new Continuation<Throwable>() {
+
+			@Override
+			public void call(Throwable data) {
+				log.error("error", data);
+			}
+		}));
+
+	}
 
 	public void messages(Messages ms) {
 		try {
@@ -147,41 +199,7 @@ public class LogIndexer implements Indexer {
 						System.out.println("indexer response " + resp);
 						
 						if(o instanceof DataObject && o.getLabel().endsWith(".txt")) {
-							System.out.println("full text");
-							Message msg= new Message();
-							msg.setOperation("retrieve");
-							ArrayList<DataEntity> list = new ArrayList<DataEntity>();
-							list.add(o);
-							msg.setHasPart(list);
-							scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
-
-								@Override
-								public void call(Reader data) {
-									try{
-									Reader is = data;
-									String s = IOUtils.toString(is);
-									is.close();
-									final HashMap<String, Object> updateObject = new HashMap<String, Object>();
-									updateObject.put("fulltext", s);
-									System.out.println("fulltext: " +s);
-									String script = "ctx._source.fulltext = fulltext ; ";
-									
-									UpdateResponse r = client
-											.prepareUpdate("databook", "entity", id)
-											.setScript(script)
-											.setScriptParams(updateObject).execute()
-											.actionGet();
-									}catch(Exception e) {
-										log.error("error", e);
-									}
-								}
-							}, new Continuation<Throwable>() {
-
-								@Override
-								public void call(Throwable data) {
-									log.error("error", data);
-								}
-							}));
+							fulltext((DataObject) o, id);
 						}
 					}
 
@@ -281,6 +299,10 @@ public class LogIndexer implements Indexer {
 							.setScriptParams(updateObject).execute()
 							.actionGet();
 					System.out.println("response : " + r);
+					if(o1 instanceof DataObject && ((DataObject) o1).getDataSize() != null) {
+						fulltext((DataObject) o0, id);
+					}
+
 					}
 				} else if (m.getOperation().equals("union")) {
 					DataEntity o0 = m.getHasPart().get(0);
