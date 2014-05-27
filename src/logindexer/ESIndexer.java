@@ -3,6 +3,9 @@ package logindexer;
 import java.beans.BeanInfo;
 import java.beans.PropertyDescriptor;
 import java.io.Reader;
+import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +22,8 @@ import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.transport.*;
+import org.elasticsearch.common.transport.*;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.QueryBuilder;
@@ -45,7 +50,7 @@ import databook.persistence.rule.rdf.ruleset.*;
 import static org.elasticsearch.node.NodeBuilder.*;
 import static org.elasticsearch.index.query.QueryBuilders.*;
 
-public class LogIndexer implements Indexer {
+public class ESIndexer implements Indexer {
 
 	IndexingService is;
 	Node node;
@@ -55,18 +60,51 @@ public class LogIndexer implements Indexer {
 	public void setIndexingService(IndexingService is) {
 		this.is = is;
 	}
+	
+    private String getOSVersion() {	
+		String[] cmd = {
+			"lsb_release", 
+			"-id"
+		};
+
+		String ret = "";
+		try {
+			Process p = Runtime.getRuntime().exec(cmd);
+			BufferedReader bri = new BufferedReader(new InputStreamReader(
+				    p.getInputStream()));
+
+			String line = "";
+			while ((line = bri.readLine()) != null) {
+				ret += line;
+			}
+		} catch (IOException e) {
+
+			log.error("error", e);
+		}
+		
+		return ret;
+		
+	}
 
 	public void startup() {
 		is.regIndexer(this);
+		String os = getOSVersion();
 		// make sure that the nodeBuilder uses the classloader for the
 		// elasticsearch.jar file
 		// this is not always the same as the classloader for this class in an
 		// osgi bundle
 		Settings settings = ImmutableSettings.settingsBuilder()
-				.classLoader(Settings.class.getClassLoader()).build();
-		node = nodeBuilder().settings(settings).clusterName("databookIndexer")
+				.classLoader(Settings.class.getClassLoader()).put("cluster.name", "databookIndexer").build();
+				
+		if(os.contains("CentOS")) {
+		client = new TransportClient(settings).addTransportAddress(new InetSocketTransportAddress("localhost", 9300));
+		} else {
+		
+		node = nodeBuilder().settings(settings)
 				.client(true).node();
-		client = node.client();
+		client = node.client();			
+		}
+
 		
 		Message m = new Message();
 		m.setOperation("retrieve");
@@ -87,7 +125,11 @@ public class LogIndexer implements Indexer {
 
 	public void shutdown() {
 		is.unregIndexer(this);
-		node.close();
+		if(node != null) {
+			node.close();
+		} else {
+			client.close();
+		}
 	}
 
 	public static class Property<T> {
@@ -124,6 +166,49 @@ public class LogIndexer implements Indexer {
 		}
 
 	}
+	
+	private void fulltext(DataObject o, final String id) {
+		setLabel(o);
+		
+		if(o.getLabel().endsWith(".txt")) {
+			System.out.println("full text");
+			Message msg= new Message();
+			msg.setOperation("retrieve");
+			ArrayList<DataEntity> list = new ArrayList<DataEntity>();
+			list.add(o);
+			msg.setHasPart(list);
+			scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
+
+				@Override
+				public void call(Reader data) {
+					try{
+					Reader is = data;
+					String s = IOUtils.toString(is);
+					is.close();
+					final HashMap<String, Object> updateObject = new HashMap<String, Object>();
+					updateObject.put("fulltext", s);
+					System.out.println("fulltext: " +s);
+					String script = "ctx._source.fulltext = fulltext ; ";
+				
+					UpdateResponse r = client
+							.prepareUpdate("databook", "entity", id)
+							.setScript(script)
+							.setScriptParams(updateObject).execute()
+							.actionGet();
+					}catch(Exception e) {
+						log.error("error", e);
+					}
+				}
+			}, new Continuation<Throwable>() {
+
+				@Override
+				public void call(Throwable data) {
+					log.error("error", data);
+				}
+			}));
+		}
+
+	}
 
 	public void messages(Messages ms) {
 		try {
@@ -146,42 +231,8 @@ public class LogIndexer implements Indexer {
 						final String id = resp.getId();
 						System.out.println("indexer response " + resp);
 						
-						if(o instanceof DataObject && o.getLabel().endsWith(".txt")) {
-							System.out.println("full text");
-							Message msg= new Message();
-							msg.setOperation("retrieve");
-							ArrayList<DataEntity> list = new ArrayList<DataEntity>();
-							list.add(o);
-							msg.setHasPart(list);
-							scheduler.submit(new Job<Reader>(this, msg, new Continuation<Reader>() {
-
-								@Override
-								public void call(Reader data) {
-									try{
-									Reader is = data;
-									String s = IOUtils.toString(is);
-									is.close();
-									final HashMap<String, Object> updateObject = new HashMap<String, Object>();
-									updateObject.put("fulltext", s);
-									System.out.println("fulltext: " +s);
-									String script = "ctx._source.fulltext = fulltext ; ";
-									
-									UpdateResponse r = client
-											.prepareUpdate("databook", "entity", id)
-											.setScript(script)
-											.setScriptParams(updateObject).execute()
-											.actionGet();
-									}catch(Exception e) {
-										log.error("error", e);
-									}
-								}
-							}, new Continuation<Throwable>() {
-
-								@Override
-								public void call(Throwable data) {
-									log.error("error", data);
-								}
-							}));
+						if(o instanceof DataObject) {
+							fulltext((DataObject) o, id);
 						}
 					}
 
@@ -245,11 +296,8 @@ public class LogIndexer implements Indexer {
 					} else {
 					prePropObjForIndexing(o1);
 					System.out.println("modify : " + o0.getUri());
-					SearchResponse response = client.prepareSearch("databook")
-							.setQuery(termQuery("uri", o0.getUri().toString()))
-							.execute().actionGet();
 
-					String id = response.getHits().getAt(0).getId();
+					String id = getId(o0);
 
 					System.out.println("modify id : " + id);
 
@@ -281,16 +329,18 @@ public class LogIndexer implements Indexer {
 							.setScriptParams(updateObject).execute()
 							.actionGet();
 					System.out.println("response : " + r);
+					
+					if(o1 instanceof DataObject && ((DataObject) o1).getDataSize() != null) {
+						fulltext((DataObject) o0, id);
+					}
+
 					}
 				} else if (m.getOperation().equals("union")) {
 					DataEntity o0 = m.getHasPart().get(0);
 					DataEntity o1 = m.getHasPart().get(1);
 					prePropObjForIndexing(o1);
-					SearchResponse response = client.prepareSearch("databook")
-							.setQuery(termQuery("uri", o0.getUri().toString()))
-							.execute().actionGet();
 
-					String id = response.getHits().getAt(0).getId();
+					String id = getId(o0);
 
 					final StringBuilder script = new StringBuilder("");
 					final HashMap<String, Object> updateObject = new HashMap<String, Object>();
@@ -332,11 +382,7 @@ public class LogIndexer implements Indexer {
 					DataEntity o0 = m.getHasPart().get(0);
 					DataEntity o1 = m.getHasPart().get(1);
 					prePropObjForIndexing(o1);
-					SearchResponse response = client.prepareSearch("databook")
-							.setQuery(termQuery("uri", o0.getUri().toString()))
-							.execute().actionGet();
-
-					String id = response.getHits().getAt(0).getId();
+					String id = getId(o0);
 
 					final StringBuilder script = new StringBuilder("");
 					final HashMap<String, Object> updateObject = new HashMap<String, Object>();
@@ -376,7 +422,24 @@ public class LogIndexer implements Indexer {
 			log.error("error", e);
 		}
 	}
+	private void setLabel(DataObject o) {
+		if(o.getLabel() == null) {
+			SearchResponse response = client.prepareSearch("databook")
+							.setQuery(termQuery("uri", o.getUri().toString()))
+							.execute().actionGet();
 
+			o.setLabel((String) response.getHits().getAt(0).sourceAsMap().get("label"));
+		}
+	}
+	
+	private String getId(DataEntity o) {
+		SearchResponse response = client.prepareSearch("databook")
+							.setQuery(termQuery("uri", o.getUri().toString()))
+							.execute().actionGet();
+							
+		return response.getHits().getAt(0).getId();
+
+	}
 	private void prePropObjForIndexing(DataEntity o) {
 		List<DataEntity> partOf;
 		User owner;

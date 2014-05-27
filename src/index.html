@@ -9,12 +9,14 @@
 		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.15/angular-resource.js"></script>
 		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.15/angular-sanitize.js"></script>
 		<!-- angular-xeditable -->
-		<link href="http://vitalets.github.io/angular-xeditable/dist/css/xeditable.css" rel="stylesheet">
+		<link href="http://vitalets.github.io/angular-xeditable/dist/css/xeditable.css" rel="stylesheet"/>
 		<script src="http://vitalets.github.io/angular-xeditable/dist/js/xeditable.js"></script>
 <!-- stomp client --><script src="https://raw.github.com/jmesnil/stomp-websocket/master/lib/stomp.js"></script>
+<script src="https://raw.githubusercontent.com/mgcrea/angular-strap/master/dist/angular-strap.min.js"></script> 
+<script src="https://raw.githubusercontent.com/mgcrea/angular-strap/master/dist/angular-strap.tpl.min.js"></script>
 		<script>
 			angular
-			.module('searchApp', ['ngResource', 'ngSanitize', 'xeditable'])
+			.module('searchApp', ['ngResource', 'ngSanitize', 'xeditable', 'mgcrea.ngStrap'])
 			.run(function(editableOptions) {
 				editableOptions.theme = 'bs3';
 			})
@@ -117,7 +119,15 @@
 										fulltext: $scope.queryString.text 
 									}
 								}],
-								minimum_should_match: 1
+								minimum_should_match: 1,
+								must: {
+									range: {
+										created: {
+											from: $scope.queryString.from ? $scope.queryString.from.getTime() / 1000 : 0,
+											to: $scope.queryString.to ? $scope.queryString.to.getTime() / 1000 : Number.MAX_VALUE
+										}
+									}
+								}
 							}
 						},
 						highlight: {
@@ -130,6 +140,12 @@
 				};
 				$scope.refresh = function() {
 					$scope.change();
+				}
+				$scope.clearTimeRange0= function() {
+					$scope.queryString.from = null;
+				}
+				$scope.clearTimeRange1 = function() {
+					$scope.queryString.to = null;
 				}
 			}]);
 			
@@ -148,14 +164,44 @@
 
 	<body ng-app="searchApp">
 		<div ng-controller="searchController">
+		
+
+	
+	<div class="container-fluid">
 		<div class="input-group">
 			<input type="text" class="form-control" placeholder="type something" ng-model="query.text" ng-change="change()"/>
-			
 			<span class="input-group-btn">
-        <button class="btn btn-default" type="button" ng-click="refresh()">Refresh</button>
-      </span>
+        		<button class="btn btn-default" type="button" ng-click="refresh()">Refresh</button>
+      		</span>
+      	</div>
+		<div class="row">
+	  		<div class="col-lg-6">
+				<div class="input-group">
+					<input class="form-control" type="text" ng-model="queryString.from" data-autoclose="1" bs-datepicker>
+					<span class="input-group-btn" style="width:0px;"></span>
+			  		<input class="form-control"type="text" ng-model="queryString.from" data-autoclose="1" bs-timepicker>
+					<span class="input-group-btn">
+						<button class="btn btn-default" type="button" ng-click="clearTimeRange0()">Clear</button>
+					</span>
+      			</div>
 			</div>
-			<div ng-show="query.result.hits">
+				
+	  		<div class="col-lg-6">
+				<div class="input-group">
+					<input class="form-control" type="text" ng-model="queryString.to" data-autoclose="1" bs-datepicker>
+					<span class="input-group-btn" style="width:0px;"></span>
+			  		<input class="form-control"type="text" ng-model="queryString.to" data-autoclose="1" bs-timepicker>
+					<span class="input-group-btn">
+						<button class="btn btn-default" type="button" ng-click="clearTimeRange1()">Clear</button>
+					</span>
+      			</div>
+			</div>				
+		</div>
+	</div>
+				
+      	
+
+		<div ng-show="query.result.hits">
 			{{ query.result.took }} ms. 
 			{{ query.result.hits.total }} record(s) found.
 					
