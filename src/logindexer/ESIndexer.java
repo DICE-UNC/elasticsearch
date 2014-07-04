@@ -312,7 +312,7 @@ public class ESIndexer implements Indexer {
 							if (v != null
 									&& !(v instanceof java.util.Collection && ((java.util.Collection<?>) v)
 											.isEmpty())) {
-								formatValue(updateObject, v, field);
+								updateObject.put(field, formatValue(v));
 								script.append("ctx._source." + field + " = "
 										+ field + " ; ");
 							}
@@ -353,7 +353,7 @@ public class ESIndexer implements Indexer {
 							if (v != null
 									&& !(v instanceof java.util.Collection && ((java.util.Collection<?>) v)
 											.isEmpty())) {
-								formatValue(updateObject, v, field);
+								updateObject.put(field, formatValue(v));
 								if (v instanceof java.util.Collection) {
 									script.append("if (ctx._source.containsKey(\"" + field+"\")) {ctx._source." + field
 											+ " += " + field + " ; } else {"
@@ -395,7 +395,7 @@ public class ESIndexer implements Indexer {
 							if (v != null
 									&& !(v instanceof java.util.Collection && ((java.util.Collection<?>) v)
 											.isEmpty())) {
-								formatValue(updateObject, v, field);
+								updateObject.put(field, formatValue(v));
 								if (v instanceof java.util.Collection) {
 									script.append("ctx._source." + field
 											+ ".removeAll(" + field + ") ; ");
@@ -476,12 +476,12 @@ public class ESIndexer implements Indexer {
 		this.scheduler = s;
 	}
 
-	private void formatValue(final HashMap<String, Object> updateObject,
-			Object v, String field) {
+	private Object formatValue(
+			Object v) {
 		if(v instanceof java.util.Date) {
-			updateObject.put(field, ((java.util.Date) v).getTime());
+			return ((java.util.Date) v).getTime();
 		} else {
-			updateObject.put(field, v);
+			return v;
 		}
 	}
 
