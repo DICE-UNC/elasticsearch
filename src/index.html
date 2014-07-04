@@ -212,6 +212,7 @@
 			<th>Title</th>
 			<th>Description</th>
 			<th>Created</th>
+			<th>Submitted</th>
 			<!-- <th>Text</th> -->
 			<th>Highlights</th>
 			</tr>
@@ -226,6 +227,7 @@
 				{{ row._source.description || "empty" }}
 			</a></td>
 			<td>{{ row._source.created * 1000 | date }} <!--{{ row._source.created }}--></td>
+			<td>{{ row._source.submitted * 1000 | date }} </td>
 			<!-- <td><span ng-show="row._source.fulltext" class="glyphicon glyphicon-file"/></td> -->
 			<td ng-bind-html="row.highlight.fulltext[0]"></td>
 			</tr>
