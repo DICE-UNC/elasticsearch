@@ -328,7 +328,7 @@ public class ESIndexer implements Indexer {
 							.actionGet();
 					System.out.println("response : " + r);
 					
-					if(o1 instanceof DataObject && ((DataObject) o1).getDataSize() != null) {
+					if(o1 instanceof DataObject && ((DataObject) o1).getSubmitted() != null) {
 						fulltext((DataObject) o0, id);
 					}
 
