@@ -314,8 +314,9 @@ public class ESIndexer implements Indexer {
 											.isEmpty())) {
 								if(v instanceof java.util.Date) {
 									updateObject.put(field, ((java.util.Date) v).getTime());
+								} else {
+									updateObject.put(field, v);
 								}
-								updateObject.put(field, v);
 								script.append("ctx._source." + field + " = "
 										+ field + " ; ");
 							}
