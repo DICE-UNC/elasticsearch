@@ -157,7 +157,7 @@ public class ESIndexer implements Indexer {
 
 			prePropObjForIndexing(o);
 			DeleteByQueryResponse response = client
-					.prepareDeleteByQuery("databook")
+g					.prepareDeleteByQuery("databook")
 					.setQuery(termQuery("uri", o.getUri().toString()))
 					.execute().actionGet();
 		}
