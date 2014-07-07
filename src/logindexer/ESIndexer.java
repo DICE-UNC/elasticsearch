@@ -36,7 +36,6 @@ import org.irods.jargon.core.query.AVUQueryElement.AVUQueryPart;
 import org.irods.jargon.core.query.AVUQueryOperatorEnum;
 import org.irods.jargon.core.query.MetaDataAndDomainData;
 
-
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.annotation.*;
 
@@ -135,16 +134,20 @@ public class ESIndexer implements Indexer {
 	private class ESRule implements EntityRule<DataObject, Object> {
 		@Override
 		public void create(DataObject o, Object context) {
-			prePropObjForIndexing(o);
-			String s = om.writeValueAsString(o);
-			System.out.println("String :" + s);
-			IndexResponse resp = client.prepareIndex("databook", "entity")
-					.setSource(s).execute().actionGet();
-			final String id = resp.getId();
-			System.out.println("indexer response " + resp);
+			try {
+				prePropObjForIndexing(o);
+				String s = om.writeValueAsString(o);
+				System.out.println("String :" + s);
+				IndexResponse resp = client.prepareIndex("databook", "entity")
+						.setSource(s).execute().actionGet();
+				final String id = resp.getId();
+				System.out.println("indexer response " + resp);
 
-			if (o instanceof DataObject) {
-				fulltext((DataObject) o, id);
+				if (o instanceof DataObject) {
+					fulltext((DataObject) o, id);
+				}
+			} catch (Exception e) {
+				log.error("error", e);
 			}
 
 		}
