@@ -131,9 +131,9 @@ public class ESIndexer implements Indexer {
 		}
 	}
 
-	private class ESRule implements EntityRule<DataObject, Object> {
+	private class ESRule implements EntityRule<DataEntity, Object> {
 		@Override
-		public void create(DataObject o, Object context) {
+		public void create(DataEntity o, Object context) {
 			try {
 				prePropObjForIndexing(o);
 				String s = om.writeValueAsString(o);
@@ -153,7 +153,7 @@ public class ESIndexer implements Indexer {
 		}
 
 		@Override
-		public void delete(DataObject o, Object context) {
+		public void delete(DataEntity o, Object context) {
 
 			prePropObjForIndexing(o);
 			DeleteByQueryResponse response = client
@@ -163,13 +163,13 @@ public class ESIndexer implements Indexer {
 		}
 
 		@Override
-		public void modify(DataObject e0, DataObject e1, Object context) {
+		public void modify(DataEntity e0, DataEntity e1, Object context) {
 
 			handleModify(e0, e1);
 		}
 
 		@Override
-		public void union(DataObject o0, DataObject o1, Object context) {
+		public void union(DataEntity o0, DataEntity o1, Object context) {
 			prePropObjForIndexing(o1);
 
 			String id = getId(o0);
@@ -210,7 +210,7 @@ public class ESIndexer implements Indexer {
 		}
 
 		@Override
-		public void diff(DataObject e0, DataObject e1, Object context) {
+		public void diff(DataEntity e0, DataEntity e1, Object context) {
 			prePropObjForIndexing(e1);
 			String id = getId(e0);
 
@@ -328,9 +328,9 @@ public class ESIndexer implements Indexer {
 	}
 
 	RuleRegistry rr = new RuleRegistry();
-	EntityRule<DataObject, Object> esRule = new ESRule();
+	EntityRule<DataEntity, Object> esRule = new ESRule();
 	{
-		rr.registerRule(DataObject.class, esRule);
+		rr.registerRule(DataEntity.class, esRule);
 	}
 	ObjectMapper om = new ObjectMapper();
 
