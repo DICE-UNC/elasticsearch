@@ -85,7 +85,7 @@ public class ESIndexer implements Indexer {
 
 	public void startup() {
 		is.regIndexer(this);
-		String os = getOSVersion();
+		// String os = getOSVersion();
 		// make sure that the nodeBuilder uses the classloader for the
 		// elasticsearch.jar file
 		// this is not always the same as the classloader for this class in an
@@ -94,15 +94,15 @@ public class ESIndexer implements Indexer {
 				.classLoader(Settings.class.getClassLoader())
 				.put("cluster.name", "databookIndexer").build();
 
-		if (os.contains("CentOS")) {
-			client = new TransportClient(settings)
-					.addTransportAddress(new InetSocketTransportAddress(
-							"localhost", 9300));
-		} else {
+		//if (os.contains("CentOS")) {
+		//	client = new TransportClient(settings)
+		//			.addTransportAddress(new InetSocketTransportAddress(
+		//					"localhost", 9300));
+		//} else {
 
 			node = nodeBuilder().settings(settings).client(true).node();
 			client = node.client();
-		}
+		//}
 
 		Message m = new Message();
 		m.setOperation("retrieve");
@@ -110,7 +110,7 @@ public class ESIndexer implements Indexer {
 		DataObject dObject = new DataObject();
 		dObject.setLabel("/databook/home/rods/t1");
 		m.setHasPart(hasPart);
-		this.scheduler.submit(new Job(null, m, new Scheduler.Continuation() {
+		this.scheduler.submit(new Job<Object>(null, m, new Scheduler.Continuation<Object>() {
 
 			@Override
 			public void call(Object data) {
