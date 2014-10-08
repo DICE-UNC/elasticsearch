@@ -123,8 +123,8 @@
 								must: {
 									range: {
 										created: {
-											from: $scope.queryString.from ? $scope.queryString.from.getTime() / 1000 : 0,
-											to: $scope.queryString.to ? $scope.queryString.to.getTime() / 1000 : Number.MAX_VALUE
+											from: $scope.queryString.from ? $scope.queryString.from.getTime() : 0,
+											to: $scope.queryString.to ? $scope.queryString.to.getTime() : Number.MAX_VALUE
 										}
 									}
 								}
@@ -226,8 +226,8 @@
 			<td><a href="#" editable-textarea="row._source.description" e-rows="7" e-cols="40" onbeforesave="update(row._source, 'description', $data)"> 
 				{{ row._source.description || "empty" }}
 			</a></td>
-			<td>{{ row._source.created * 1000 | date }} <!--{{ row._source.created }}--></td>
-			<td>{{ row._source.submitted * 1000 | date }} </td>
+			<td>{{ row._source.created | date }} <!--{{ row._source.created }}--></td>
+			<td>{{ row._source.submitted | date }} </td>
 			<!-- <td><span ng-show="row._source.fulltext" class="glyphicon glyphicon-file"/></td> -->
 			<td ng-bind-html="row.highlight.fulltext[0]"></td>
 			</tr>

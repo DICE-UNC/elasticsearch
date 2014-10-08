@@ -27,6 +27,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.node.Node;
+import org.elasticsearch.search.SearchHits;
 import org.irods.jargon.core.pub.DataObjectAO;
 import org.irods.jargon.core.pub.IRODSAccessObjectFactory;
 import org.irods.jargon.core.pub.domain.AvuData;
@@ -50,16 +51,12 @@ import databook.persistence.rule.rdf.ruleset.*;
 import static org.elasticsearch.node.NodeBuilder.*;
 import static org.elasticsearch.index.query.QueryBuilders.*;
 
-public class ESIndexer implements Indexer {
+public class ESIndexer extends AbstractIndexer implements Indexer {
 
-	IndexingService is;
+	private static final boolean AS_CLIENT = true;
 	Node node;
 	Client client;
 	public static Log log = LogFactory.getLog("index-indexer-elastic");
-
-	public void setIndexingService(IndexingService is) {
-		this.is = is;
-	}
 
 	private String getOSVersion() {
 		String[] cmd = { "lsb_release", "-id" };
@@ -83,26 +80,10 @@ public class ESIndexer implements Indexer {
 
 	}
 
+	@Override
 	public void startup() {
-		is.regIndexer(this);
-		// String os = getOSVersion();
-		// make sure that the nodeBuilder uses the classloader for the
-		// elasticsearch.jar file
-		// this is not always the same as the classloader for this class in an
-		// osgi bundle
-		Settings settings = ImmutableSettings.settingsBuilder()
-				.classLoader(Settings.class.getClassLoader())
-				.put("cluster.name", "databookIndexer").build();
-
-		//if (os.contains("CentOS")) {
-		//	client = new TransportClient(settings)
-		//			.addTransportAddress(new InetSocketTransportAddress(
-		//					"localhost", 9300));
-		//} else {
-
-			node = nodeBuilder().settings(settings).client(true).node();
-			client = node.client();
-		//}
+		super.startup();
+		connect();
 
 		Message m = new Message();
 		m.setOperation("retrieve");
@@ -122,8 +103,30 @@ public class ESIndexer implements Indexer {
 
 	}
 
+	private void connect() {
+		String os = getOSVersion();
+		// make sure that the nodeBuilder uses the classloader for the
+		// elasticsearch.jar file
+		// this is not always the same as the classloader for this class in an
+		// osgi bundle
+		Settings settings = ImmutableSettings.settingsBuilder()
+				.classLoader(Settings.class.getClassLoader())
+				.put("cluster.name", "databookIndexer").build();
+
+		if (os.contains("CentOS") || AS_CLIENT) {
+			client = new TransportClient(settings)
+					.addTransportAddress(new InetSocketTransportAddress(
+							"localhost", 9300));
+		} else {
+
+			node = nodeBuilder().settings(settings).client(true).node();
+			client = node.client();
+		}
+	}
+
+	@Override
 	public void shutdown() {
-		is.unregIndexer(this);
+		super.shutdown();
 		if (node != null) {
 			node.close();
 		} else {
@@ -206,8 +209,10 @@ public class ESIndexer implements Indexer {
 			UpdateResponse r = client.prepareUpdate("databook", "entity", id)
 					.setScript(script.toString()).setScriptParams(updateObject)
 					.execute().actionGet();
+			
 
 		}
+		
 
 		@Override
 		public void diff(DataEntity e0, DataEntity e1, Object context) {
@@ -327,13 +332,13 @@ public class ESIndexer implements Indexer {
 
 	}
 
-	RuleRegistry rr = new RuleRegistry();
 	EntityRule<DataEntity, Object> esRule = new ESRule();
 	{
-		rr.registerRule(DataEntity.class, esRule);
+		ruleRegistry.registerRule(DataEntity.class, esRule);
 	}
 	ObjectMapper om = new ObjectMapper();
 
+	@Override
 	public void messages(Messages ms) {
 		try {
 			// System.out.println("messages received " + ms);
@@ -343,44 +348,10 @@ public class ESIndexer implements Indexer {
 					.setSource(s).execute().actionGet();
 			System.out.println("indexer response " + resp);
 
-			for (Message m : ms.getMessages()) {
-				if (m.getOperation().equals("create")) {
-					for (DataEntity o : m.getHasPart()) {
-
-						EntityRule r = rr.lookupRule(o);
-						r.create(o, null);
-					}
-
-				} else if (m.getOperation().equals("delete")) {
-					for (DataEntity o : m.getHasPart()) {
-						EntityRule r = rr.lookupRule(o);
-						r.delete(o, null);
-
-					}
-				} else if (m.getOperation().equals("modify")) {
-					final DataEntity o0 = m.getHasPart().get(0);
-					final DataEntity o1 = m.getHasPart().get(1);
-					EntityRule r = rr.lookupRule(o0);
-					r.modify(o0, o1, null);
-
-				} else if (m.getOperation().equals("union")) {
-					DataEntity o0 = m.getHasPart().get(0);
-					DataEntity o1 = m.getHasPart().get(1);
-					EntityRule r = rr.lookupRule(o0);
-					r.union(o0, o1, null);
-
-				}
-
-				else if (m.getOperation().equals("diff")) {
-					DataEntity o0 = m.getHasPart().get(0);
-					DataEntity o1 = m.getHasPart().get(1);
-					EntityRule r = rr.lookupRule(o0);
-					r.diff(o0, o1, null);
-				}
-			}
 		} catch (Exception e) {
 			log.error("error", e);
 		}
+		super.messages(ms);
 	}
 
 	private void handleModify(final DataEntity o0, DataEntity o1) {
@@ -504,11 +475,59 @@ public class ESIndexer implements Indexer {
 		return response.getHits().getAt(0).getId();
 
 	}
+	
+	private String getCollUri(DataEntity o) {
+		long total = -1;
+		SearchHits hits = null;
+		int count = 0;
+		int max = 10;
+		do {
+			if(total!=-1) {
+				try{
+					Thread.sleep(100);
+				
+				} catch(Exception e) {
+					e.printStackTrace();
+				}
+			}
+			
+			System.out.println("getCollUri: uri = " + o.getUri());
+			SearchResponse response = client.prepareSearch("databook")
+					.setQuery(termQuery("uri", o.getUri().toString())).execute()
+					.actionGet();
+	
+			System.out.println("getCollUri: response = " + response);
+			
+			hits = response.getHits();
+			total = hits.getTotalHits();
+			count ++;
+		} while(total == 0 && count <= max); // try 10 times, if can't find it give up
+		return count == max ? null : (String)((List<String>)hits.getAt(0).sourceAsMap().get("partOfUri")).get(0);
+		
+	}
+
+
 
 	private void prePropObjForIndexing(DataEntity o) {
 		List<DataEntity> partOf;
 		User owner;
 		List<String> cUri = new ArrayList<String>();
+		System.out.println("type = " + o.getClass().getName());
+		if(o instanceof Access) {
+			try {
+			List<DataEntityLink> dels = ((Access) o).getLinkingDataEntity();
+			DataEntityLink del = new DataEntityLink();
+			Collection c = new Collection();
+			String curi = getCollUri(dels.get(0).getDataEntity());
+			if(curi!=null) {
+				c.setUri(new java.net.URI(curi));
+				del.setDataEntity(c);
+				dels.add(del);
+			}
+			} catch(Exception e) {
+				e.printStackTrace();
+			}
+		}
 		if ((partOf = o.getPartOf()) != null) {
 
 			o.setPartOf(null);
@@ -538,11 +557,6 @@ public class ESIndexer implements Indexer {
 		o.setType(o.getClass().getName());
 	}
 
-	Scheduler scheduler;
-
-	public void setScheduler(Scheduler s) {
-		this.scheduler = s;
-	}
 
 	private Object formatValue(Object v) {
 		if (v instanceof java.util.Date) {
